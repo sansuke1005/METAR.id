@@ -1,6 +1,7 @@
 import flet
 from flet import *
 import requests
+from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
 import math
 import webbrowser
@@ -22,6 +23,17 @@ RWYData = {}
 aircrafts = {}
 airlines = {}
 
+def check_version():
+    try:
+        corrent_version = requests.get("https://raw.githubusercontent.com/sansuke1005/METAR.id/main/corrent_version.txt",timeout=3.5).text
+    except RequestException:
+        return 3
+    if corrent_version == "404: Not Found":
+        return 2
+    if version == corrent_version:
+        return 0
+    return 1
+    
 def load_text_file():
     for s in textFiles:
         if not os.path.isfile(os.path.join(filepath, s)):
@@ -356,6 +368,30 @@ def main(page: Page):
     app = TodoApp()
     page.add(app)
 
+
+    version_status = check_version()
+    def dlf_update(e):
+        if version_status == 1:
+            webbrowser.open("https://github.com/sansuke1005/METAR.id/releases", new=0, autoraise=True)
+        page.window_destroy()
+
+    dlg_update = AlertDialog(
+        modal=True,
+
+        actions_alignment=MainAxisAlignment.END,
+    )
+    status_title = ["","アップデートがあります","アプリは現在使用できません","ネットワークエラー"]
+    if version_status != 0:
+        time.sleep(0.1)
+        page.dialog = dlg_update
+        dlg_update.title = Text(status_title[version_status])
+        if version_status == 1:
+            dlg_update.actions = [TextButton("Go to Github", on_click=dlf_update)]
+        else:
+            dlg_update.actions = [TextButton("OK", on_click=dlf_update)]
+        dlg_update.open = True
+        page.update()
+
     def dlf_clicked(e):
         page.window_destroy()
 
@@ -368,6 +404,7 @@ def main(page: Page):
         actions_alignment=MainAxisAlignment.END,
     )
     isTextLoaded = load_text_file()
+
     if not isTextLoaded == "":
         time.sleep(0.1)
         page.dialog = dlg_modal
