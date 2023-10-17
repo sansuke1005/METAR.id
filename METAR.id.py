@@ -13,35 +13,46 @@ import os
 
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
-specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWKID"]
+specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWKID","SOURCE"]
 version = "beta 1.0"
 filepath = os.path.dirname(os.path.abspath(__file__))
+textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
 RWYData = {}
-with open(os.path.join(filepath, "RWYData.txt")) as f:
-    flines = f.readlines()
-    del flines[0]
-    for data in flines:
-        dataList = data.split(",")
-        RWYData[dataList[0]]=[dataList[1],dataList[2],dataList[3],dataList[4],dataList[5],dataList[6].strip()]
 aircrafts = {}
-with open(os.path.join(filepath, "AIRCRAFT.txt")) as f:
-    flines = f.readlines()
-    del flines[0]
-    for data in flines:
-        dataList = data.split(",")
-        if not dataList[0] in aircrafts.keys():
-            aircrafts[dataList[0]]=[dataList[1],dataList[2],dataList[3].strip()]
 airlines = {}
-with open(os.path.join(filepath, "AIRLINES.txt")) as f:
-    flines = f.readlines()
-    del flines[0]
-    for data in flines:
-        dataList = data.split(",")
-        if not dataList[0] in airlines.keys():
-            airlines[dataList[0]]=[dataList[1],dataList[2],dataList[3],dataList[4].strip()]
+
+def load_text_file():
+    for s in textFiles:
+        if not os.path.isfile(os.path.join(filepath, s)):
+            return s
+
+    with open(os.path.join(filepath, textFiles[0])) as f:
+        flines = f.readlines()
+        del flines[0]
+        for data in flines:
+            dataList = data.split(",")
+            RWYData[dataList[0]]=[dataList[1],dataList[2],dataList[3],dataList[4],dataList[5],dataList[6].strip()]
+    with open(os.path.join(filepath, textFiles[1])) as f:
+        flines = f.readlines()
+        del flines[0]
+        for data in flines:
+            dataList = data.split(",")
+            if not dataList[0] in aircrafts.keys():
+                aircrafts[dataList[0]]=[dataList[1],dataList[2],dataList[3].strip()]
+    with open(os.path.join(filepath, textFiles[2])) as f:
+        flines = f.readlines()
+        del flines[0]
+        for data in flines:
+            dataList = data.split(",")
+            if not dataList[0] in airlines.keys():
+                airlines[dataList[0]]=[dataList[1],dataList[2],dataList[3],dataList[4].strip()]
+    return ""
+
 
 def getMetar(port):
+    if not port in RWYData.keys():
+        return "Error"
     params = {'Area': '0', 'Port': port}
     html = requests.get(load_url, params=params)
     soup = BeautifulSoup(html.content, "html.parser")
@@ -54,8 +65,7 @@ def getMetar(port):
         for i in range(line_len-7):
             metar_temp.append(line[i+3].strip()) 
         return " ".join(metar_temp)
-    else:
-        return "Error"
+    return "Error"
 
 def codeConvert(port):
     if len(port)==1:
@@ -70,7 +80,15 @@ def metar_summary(s):
     metar_split = s.split(" ")
     if metar_split[3] == "AUTO":
         del metar_split[3]
-    metar_short = [metar_split[1],metar_split[2][2:],metar_split[3][:3]+"@"+metar_split[3][3:5],metar_split[-1][:5]]
+    QNH = "ERROR"
+    for i in range(len(metar_split)):
+        QNH_temp = metar_split[len(metar_split)-i-1]
+        if QNH_temp[0] == "A":
+            if len(QNH_temp) == 5 or len(QNH_temp) == 6:
+                if QNH_temp[1:5].isdecimal():
+                        QNH = QNH_temp[:5]
+                        break
+    metar_short = [metar_split[1],metar_split[2][2:],metar_split[3][:3]+"@"+metar_split[3][3:5],QNH]
     return " ".join(metar_short)
 
 def getAiportName(port):
@@ -126,11 +144,16 @@ def special(s):
         webbrowser.open("https://vatjpn.org/document/public/crc/78/171", new=0, autoraise=True)
     if s == specialKey[5]:
         webbrowser.open("https://squawk.id/", new=0, autoraise=True)
-    return ""
+    if s == specialKey[6]:
+        webbrowser.open(load_url, new=0, autoraise=True)
+    return ""    
 
 def autoSelector(s):
     if s in specialKey:
         return special(s)
+    if s.isdecimal() and (len(s)==6 or len(s)==7):
+        webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
+        return ""
     if len(s)==1:
         return getMetar("RJ"+s+s)
     if len(s)==2:
@@ -156,10 +179,8 @@ class Task(UserControl):
         self.metar_short = metar_summary(self.metar).split(" ")
 
         if self.metar_short[0] == "Error":
-            print("Error")
             return Column()
         if self.metar_short[0] in metars.keys():
-            print("Same")
             return Column()
         
         metars[self.task_name]=self.metar
@@ -220,39 +241,26 @@ class TodoApp(UserControl):
             on_submit=self.add_clicked, 
             on_change=self.check_alnum,
             content_padding= padding.only(left=5),
-            )
-        self.dd = Dropdown(
-                            width=65,
-                            content_padding= 5,
-                            text_size=13,
-                            value="5min",
-                            on_change=self.dd_change,
-                            options=[
-                                dropdown.Option("None"),
-                                dropdown.Option("5min"),
-                                dropdown.Option("10min"),
-                                dropdown.Option("15min"),
-                                dropdown.Option("30min"),
-                                dropdown.Option("45min"),
-                                dropdown.Option("60min"),
-                            ],
-                        )
-        self.tasks = Column(spacing=0)
+        )
+        self.tasks = Column(spacing=0, scroll=ScrollMode.AUTO,)
         self.info = TextField(
             text_size=13,
             multiline=True,
             disabled=True,
             value="",
             min_lines=4,
-            content_padding= padding.only(left=5),
+            max_lines=4,
+            content_padding= padding.only(left=5,bottom=5),
             color = colors.ON_BACKGROUND,
             #filled=True,
             #border_radius=0,
         )
-        self.pb = ProgressBar(width=300, color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0)
+        self.pb = ProgressBar(color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0)
 
-        self.t = CustomThread1(self.reload_clicked,self.dd)
+        self.t = CustomThread1(self.reload_clicked)
         self.t.start()
+
+
 
         # application's root control (i.e. "view") containing all other controls
         return Column(
@@ -263,7 +271,6 @@ class TodoApp(UserControl):
                     height=30,
                     controls=[
                         self.new_task,
-                        self.dd,
                         FloatingActionButton(
                             icon=icons.CACHED,
                             on_click=self.reload_clicked,
@@ -275,7 +282,7 @@ class TodoApp(UserControl):
                 ),
                 Container(
                     self.tasks,
-                    height=230,
+                    height=225,
                 ),
                 Container(
                     self.info,
@@ -285,7 +292,6 @@ class TodoApp(UserControl):
             ],
         )
         
-
     
 
     def add_clicked(self, e):
@@ -336,14 +342,6 @@ class TodoApp(UserControl):
         self.pb.value = 0
         self.update()
 
-    def dd_change(self, e):
-        self.t.kill()
-        self.t = CustomThread1(self.reload_clicked,self.dd)
-        self.t.start()
-
-    
-
-
 def main(page: Page):
     page.title = "METAR.id"
     #page.theme_mode = "LIGHT"
@@ -353,37 +351,43 @@ def main(page: Page):
     page.window_resizable = False
     page.window_always_on_top = True
     page.theme = theme.Theme(color_scheme_seed='blue')
-    #page.on_window_event = window_event
     page.update()
 
-    # create application instance
     app = TodoApp()
+    page.add(app)
+
+    def dlf_clicked(e):
+        page.window_destroy()
+
+    dlg_modal = AlertDialog(
+        modal=True,
+        title=Text("ファイルが見つかりません"),
+        actions=[
+            TextButton("OK", on_click=dlf_clicked),
+        ],
+        actions_alignment=MainAxisAlignment.END,
+    )
+    isTextLoaded = load_text_file()
+    if not isTextLoaded == "":
+        time.sleep(0.1)
+        page.dialog = dlg_modal
+        dlg_modal.content = Text(isTextLoaded)
+        dlg_modal.open = True
+        page.update()
 
     
 
-    # add application's root control to the page
-    page.add(app)
 
+    
 
 class CustomThread1(threading.Thread):
-  def __init__(self, reload_clicked, dd):
+  def __init__(self, reload_clicked):
     super().__init__()
     self.reload_clicked = reload_clicked
-    self.dd = dd
-
-  def kill(self):
-    ret = ctypes.pythonapi.PyThreadState_SetAsyncExc(self.native_id, ctypes.py_object(SystemExit))
-    if ret > 1:  # 状態が変更されたスレッドの数を返す。通常は、1。見つからなかった場合は、0。
-      ctypes.pythonapi.PyThreadState_SetAsyncExc(self.native_id, None)  # たぶん必要ないが念のため。まだ送られていない例外を消去
   
   def run(self):
     while True:
-        if self.dd.value == "None":
-            while True:
-                time.sleep(1)
-                print("waiting")
-        interval = int(re.findall(r"\d+", self.dd.value)[0])
-        time.sleep(interval*60)
+        time.sleep(300)
         self.reload_clicked(None)
 
 
