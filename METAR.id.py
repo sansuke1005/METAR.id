@@ -11,17 +11,19 @@ import threading
 import time
 import ctypes
 import os
+import sys
 
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
-specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWKID","SOURCE"]
+specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWKID","SOURCE","METAR.ID"]
 version = "beta 1.0"
-filepath = os.path.dirname(os.path.abspath(__file__))
+filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
 RWYData = {}
 aircrafts = {}
 airlines = {}
+fixnames = {}
 
 def check_version():
     try:
@@ -59,6 +61,14 @@ def load_text_file():
             dataList = data.split(",")
             if not dataList[0] in airlines.keys():
                 airlines[dataList[0]]=[dataList[1],dataList[2],dataList[3],dataList[4].strip()]
+    if os.path.isfile(os.path.join(filepath, "FIXNAMES.txt")):
+        with open(os.path.join(filepath, "FIXNAMES.txt")) as f:
+            flines = f.readlines()
+            del flines[0]
+            for data in flines:
+                dataList = data.split(",")
+                if not dataList[0] in fixnames.keys():
+                    fixnames[dataList[0]]=dataList[2]
     return ""
 
 
@@ -90,8 +100,11 @@ def metar_summary(s):
     if s == "Error":
         return "Error"
     metar_split = s.split(" ")
-    if metar_split[3] == "AUTO":
+    if metar_split[3] == "AUTO" or metar_split[3] == "COR":
         del metar_split[3]
+    if "NIL" in metar_split[3]:
+        metar_short = [metar_split[1],metar_split[2][2:],"N/A","N/A"]
+        return " ".join(metar_short)
     QNH = "ERROR"
     for i in range(len(metar_split)):
         QNH_temp = metar_split[len(metar_split)-i-1]
@@ -111,8 +124,10 @@ def getRecommendRWY(port, metar_short):
     priy_rwy = RWYData[port][0]
     oppo_rwy = RWYData[port][1]
     wind = metar_short[2]
+    if wind == "N/A":
+        return ["RWY" + priy_rwy.zfill(2),False]
     if wind[:3] == "VRB":
-        return "RWY" + priy_rwy.zfill(2)
+        return ["RWY" + priy_rwy.zfill(2),False]
     wind_d = int(wind[:3])
     wind_v = int(wind[4:])
     wind_limit = int(RWYData[port][2])
@@ -120,8 +135,33 @@ def getRecommendRWY(port, metar_short):
     wind_t = -math.cos(math.radians(wind_diff))*wind_v
     recommendRWY = ""
     if wind_t < wind_limit:
-        return "RWY" + priy_rwy.zfill(2)
-    return "RWY" + oppo_rwy.zfill(2)
+        if wind_t > 0:
+            return ["RWY" + priy_rwy.zfill(2),True]
+        else:
+            return ["RWY" + priy_rwy.zfill(2),False]
+    return ["RWY" + oppo_rwy.zfill(2),False]
+
+def chekIMC(metar):
+    if metar == "Error":
+        return False
+    metar_split = metar.split(" ")
+    if metar_split[3] == "AUTO" or metar_split[3] == "COR":
+        del metar_split[3]
+
+    if "NIL" in metar_split[3]:
+        return False
+
+    for s in metar_split:
+        if s.isdecimal():
+            if int(s) < 5000:
+                return True
+
+    for s in metar_split:
+        if "BKN" in s or "OVC" in s :
+            if s[3:].isdecimal():
+                if int(s[3:]) < 10:
+                    return True
+    return False
 
 def getAircraft(s):
     if s not in aircrafts.keys():
@@ -138,8 +178,8 @@ def getAirline(s):
         return None
     airline = airlines[s]
     out = [s]
-    menus = ["Company","Call Sign","Country","Area"]
-    for i in range(4):
+    menus = ["Company","Callsign","Country"]
+    for i in range(3):
         out.append(menus[i]+": "+airline[i])
     return "\n".join(out)
 
@@ -158,25 +198,35 @@ def special(s):
         webbrowser.open("https://squawk.id/", new=0, autoraise=True)
     if s == specialKey[6]:
         webbrowser.open(load_url, new=0, autoraise=True)
+    if s == specialKey[7]:
+        webbrowser.open("https://github.com/sansuke1005/METAR.id", new=0, autoraise=True)
     return ""    
+
+def get_fix_name(s):
+    if s not in fixnames.keys():
+        return None
+    fixname = "Name: " + fixnames[s]
+    return s + "\n" + fixname
 
 def autoSelector(s):
     if s in specialKey:
-        return special(s)
+        return [special(s),None]
     if s.isdecimal() and (len(s)==6 or len(s)==7):
         webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
-        return ""
+        return ["",None]
     if len(s)==1:
-        return getMetar("RJ"+s+s)
+        return [getMetar("RJ"+s+s),"METAR"]
     if len(s)==2:
-        return getMetar("RJ"+s)
+        return [getMetar("RJ"+s),"METAR"]
     if s[:2] == "RJ" or s[:2] == "RO":
-        return getMetar(s)
+        return [getMetar(s),"METAR"]
+    if get_fix_name(s) != None:
+        return [get_fix_name(s),"Fix"]
     if getAircraft(s) != None:
-        return getAircraft(s)
+        return [getAircraft(s),"Aircraft"]
     if getAirline(s) != None:
-        return getAirline(s)
-    return "Error"
+        return [getAirline(s),"Airline"]
+    return ["Error",None]
 
 
 class Task(UserControl):
@@ -197,36 +247,52 @@ class Task(UserControl):
         
         metars[self.task_name]=self.metar
 
+        self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
+        self.textRWY = Text(self.recommendRWY[0], size=13, text_align = TextAlign.CENTER)
+        if self.recommendRWY[1]:
+            self.textRWY.color = colors.RED
+
         self.display_view = Container(
             Row(
                 alignment="spaceBetween",
                 vertical_alignment="center",
                 height=17,
                 controls=[
-                    Text(self.metar_short[0], size=13),
-                    Text(self.metar_short[1], size=13),
-                    Text(self.metar_short[2], size=13),
-                    Text(self.metar_short[3], size=13),
-                    Text(getRecommendRWY(self.metar_short[0],self.metar_short), size=13),
-                    Row(
-                        spacing=0,
-                        controls=[
-                            IconButton(
-                                icons.DELETE_OUTLINE,
-                                on_click=self.delete_clicked,
-                                icon_size=20,
-                                width=20,
-                                
-                                style=ButtonStyle(
-                                    color={
-                                        MaterialState.HOVERED: colors.RED,
-                                        MaterialState.DEFAULT: colors.ON_BACKGROUND,
-                                    },
-                                    overlay_color=colors.with_opacity(0, colors.PRIMARY),
-                                    padding=0,
-                                ),
-                            ),
-                        ],
+                    Container(
+                        Text(self.metar_short[0], size=13, text_align = TextAlign.CENTER),
+                        width=40,
+                    ),
+                    Container(
+                        Text(self.metar_short[1], size=13, text_align = TextAlign.CENTER),
+                        width=40,
+                    ),
+                    Container(
+                        Text(self.metar_short[2], size=13, text_align = TextAlign.CENTER),
+                        width=53,
+                    ),
+                    Container(
+                        Text(self.metar_short[3], size=13, text_align = TextAlign.CENTER),
+                        width=40,
+                    ),
+                    Container(
+                        self.textRWY,
+                        width=45,
+                    ),
+
+                    IconButton(
+                        icons.DELETE_OUTLINE,
+                        on_click=self.delete_clicked,
+                        icon_size=18,
+                        width=20,
+                        
+                        style=ButtonStyle(
+                            color={
+                                MaterialState.HOVERED: colors.RED,
+                                MaterialState.DEFAULT: colors.ON_BACKGROUND,
+                            },
+                            overlay_color=colors.with_opacity(0, colors.PRIMARY),
+                            padding=1,
+                        ),
                     ),
                 ],
             ),
@@ -234,10 +300,12 @@ class Task(UserControl):
             ink=True,
             on_click=self.container_clicked,
         )
+        if chekIMC(self.metar):
+            self.display_view.bgcolor = colors.with_opacity(0.1, colors.RED)
         return Column(controls=[self.display_view],spacing=0,)
     
     def container_clicked(self, e):
-        self.task_clicked(self,getAiportName(self.task_name)+"\n"+metars[self.task_name])
+        self.task_clicked(self,getAiportName(self.task_name)+"\n"+metars[self.task_name],"METAR")
 
     def delete_clicked(self, e):
         metars.pop(self.metar_short[0])
@@ -248,22 +316,30 @@ class TodoApp(UserControl):
     def build(self):
         self.new_task = TextField(
             text_size=13,
-            #capitalization="CHARACTERS",
             expand=True, 
             on_submit=self.add_clicked, 
             on_change=self.check_alnum,
             content_padding= padding.only(left=5),
+            border_color = colors.OUTLINE,
         )
         self.tasks = Column(spacing=0, scroll=ScrollMode.AUTO,)
         self.info = TextField(
             text_size=13,
             multiline=True,
-            disabled=True,
+            read_only=True,
             value="",
             min_lines=4,
             max_lines=4,
-            content_padding= padding.only(left=5,bottom=5),
-            color = colors.ON_BACKGROUND,
+            content_padding= 5,
+            border_color = colors.OUTLINE_VARIANT,
+            focused_border_color = colors.OUTLINE_VARIANT,
+            focused_border_width = 1,
+            label=None,
+            label_style = TextStyle(
+                size = 13,
+                color = colors.OUTLINE_VARIANT,
+            )
+            
             #filled=True,
             #border_radius=0,
         )
@@ -294,7 +370,7 @@ class TodoApp(UserControl):
                 ),
                 Container(
                     self.tasks,
-                    height=225,
+                    height=215,
                 ),
                 Container(
                     self.info,
@@ -310,11 +386,11 @@ class TodoApp(UserControl):
         self.pb.value = None
         self.update()
         info = autoSelector(self.new_task.value)
-        if info[:5] == "METAR":
+        if info[0][:5] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked)
             self.tasks.controls.append(task)
         else:
-            self.task_clicked(None,info)
+            self.task_clicked(None, info[0], info[1])
         self.new_task.value = ""
         self.pb.value = 0
         self.update()
@@ -337,8 +413,9 @@ class TodoApp(UserControl):
         self.tasks.controls.remove(task)
         self.update()
 
-    def task_clicked(self, task, new_info):
+    def task_clicked(self, task, new_info, info_label):
         self.info.value = new_info
+        self.info.label = info_label
         self.update()
 
     def reload_clicked(self, e):
@@ -358,7 +435,7 @@ def main(page: Page):
     page.title = "METAR.id"
     #page.theme_mode = "LIGHT"
     page.window_width = 300
-    page.window_height = 400
+    page.window_height = 396
     page.window_maximizable = False
     page.window_resizable = False
     page.window_always_on_top = True
@@ -412,11 +489,6 @@ def main(page: Page):
         dlg_modal.open = True
         page.update()
 
-    
-
-
-    
-
 class CustomThread1(threading.Thread):
   def __init__(self, reload_clicked):
     super().__init__()
@@ -426,8 +498,5 @@ class CustomThread1(threading.Thread):
     while True:
         time.sleep(300)
         self.reload_clicked(None)
-
-
-
 
 flet.app(target=main)
