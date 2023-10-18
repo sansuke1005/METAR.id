@@ -16,7 +16,7 @@ import sys
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWKID","SOURCE","METAR.ID"]
-version = "beta 1.0"
+version = "v0.1.0-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
