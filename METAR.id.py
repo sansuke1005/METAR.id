@@ -86,7 +86,10 @@ def getMetar(port):
     if line_len >= 8:
         for i in range(line_len-7):
             metar_temp.append(line[i+3].strip()) 
-        return " ".join(metar_temp)
+        metar = " ".join(metar_temp)
+        if metar[:5] == "METAR":
+            metar = metar[6:]
+        return metar
     return "Error"
 
 def codeConvert(port):
@@ -100,10 +103,10 @@ def metar_summary(s):
     if s == "Error":
         return "Error"
     metar_split = s.split(" ")
-    if metar_split[3] == "AUTO" or metar_split[3] == "COR":
-        del metar_split[3]
-    if "NIL" in metar_split[3]:
-        metar_short = [metar_split[1],metar_split[2][2:],"N/A","N/A"]
+    if metar_split[2] == "AUTO" or metar_split[2] == "COR":
+        del metar_split[2]
+    if "NIL" in metar_split[2]:
+        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A"]
         return " ".join(metar_short)
     QNH = "ERROR"
     for i in range(len(metar_split)):
@@ -113,7 +116,7 @@ def metar_summary(s):
                 if QNH_temp[1:5].isdecimal():
                         QNH = QNH_temp[:5]
                         break
-    metar_short = [metar_split[1],metar_split[2][2:],metar_split[3][:3]+"@"+metar_split[3][3:5],QNH]
+    metar_short = [metar_split[0],metar_split[1][2:],metar_split[2][:3]+"@"+metar_split[2][3:5],QNH]
     return " ".join(metar_short)
 
 def getAiportName(port):
@@ -145,10 +148,10 @@ def chekIMC(metar):
     if metar == "Error":
         return False
     metar_split = metar.split(" ")
-    if metar_split[3] == "AUTO" or metar_split[3] == "COR":
-        del metar_split[3]
+    if metar_split[2] == "AUTO" or metar_split[2] == "COR":
+        del metar_split[2]
 
-    if "NIL" in metar_split[3]:
+    if "NIL" in metar_split[2]:
         return False
 
     for s in metar_split:
@@ -237,14 +240,12 @@ class Task(UserControl):
         self.task_clicked = task_clicked
 
     def build(self):
+        if self.task_name in metars.keys():
+            return Column()
         self.metar = getMetar(self.task_name)
         self.metar_short = metar_summary(self.metar).split(" ")
-
         if self.metar_short[0] == "Error":
             return Column()
-        if self.metar_short[0] in metars.keys():
-            return Column()
-        
         metars[self.task_name]=self.metar
 
         self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
@@ -339,9 +340,6 @@ class TodoApp(UserControl):
                 size = 13,
                 color = colors.OUTLINE_VARIANT,
             )
-            
-            #filled=True,
-            #border_radius=0,
         )
         self.pb = ProgressBar(color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0)
 
@@ -350,7 +348,6 @@ class TodoApp(UserControl):
 
 
 
-        # application's root control (i.e. "view") containing all other controls
         return Column(
             spacing=5,
             controls=[
@@ -386,7 +383,7 @@ class TodoApp(UserControl):
         self.pb.value = None
         self.update()
         info = autoSelector(self.new_task.value)
-        if info[0][:5] == "METAR":
+        if info[1] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked)
             self.tasks.controls.append(task)
         else:
@@ -400,12 +397,10 @@ class TodoApp(UserControl):
             hankaku=True
             for c in self.new_task.value:
                 if not unicodedata.east_asian_width(c) == "Na":
-                    print(unicodedata.east_asian_width(c))
                     hankaku=False
             if hankaku==True:
                 self.new_task.value = self.new_task.value.upper()
                 self.update()
-        #if not re.compile("[a-zA-Z0-9]+").match(self.new_task.value):
             
 
 
