@@ -97,6 +97,8 @@ def codeConvert(port):
         return "RJ" + port + port
     elif len(port)==2:
         return "RJ" + port
+    elif len(port)==3:
+        return "R" + port
     return port
 
 def metar_summary(s):
@@ -106,17 +108,24 @@ def metar_summary(s):
     if metar_split[2] == "AUTO" or metar_split[2] == "COR":
         del metar_split[2]
     if "NIL" in metar_split[2]:
-        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A"]
+        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A",0]
         return " ".join(metar_short)
     QNH = "ERROR"
+    availFL = ""
     for i in range(len(metar_split)):
         QNH_temp = metar_split[len(metar_split)-i-1]
         if QNH_temp[0] == "A":
             if len(QNH_temp) == 5 or len(QNH_temp) == 6:
                 if QNH_temp[1:5].isdecimal():
                         QNH = QNH_temp[:5]
+                        if int(QNH[1:]) < 2942:
+                            availFL = "2"
+                            break
+                        if int(QNH[1:]) < 2992:
+                            availFL = "1"
+                            break
                         break
-    metar_short = [metar_split[0],metar_split[1][2:],metar_split[2][:3]+"@"+metar_split[2][3:5],QNH]
+    metar_short = [metar_split[0],metar_split[1][2:],metar_split[2][:3]+"@"+metar_split[2][3:5],QNH,availFL]
     return " ".join(metar_short)
 
 def getAiportName(port):
@@ -212,17 +221,28 @@ def get_fix_name(s):
     return s + "\n" + fixname
 
 def autoSelector(s):
+    if s == "/" or s == "CLR" or s == "CLEAR":
+        return ["","CLEAR"]
     if s in specialKey:
         return [special(s),None]
     if s.isdecimal() and (len(s)==6 or len(s)==7):
         webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
         return ["",None]
     if len(s)==1:
-        return [getMetar("RJ"+s+s),"METAR"]
+        port = "RJ"+s+s
+        if port in RWYData.keys():
+            return [getMetar(port),"METAR"]
     if len(s)==2:
-        return [getMetar("RJ"+s),"METAR"]
+        port = "RJ"+s
+        if port in RWYData.keys():
+            return [getMetar(port),"METAR"]
+    if len(s)==3 and s[0] == "O":
+        port = "R"+s
+        if port in RWYData.keys():
+            return [getMetar(port),"METAR"]
     if s[:2] == "RJ" or s[:2] == "RO":
-        return [getMetar(s),"METAR"]
+        if s in RWYData.keys():
+            return [getMetar(s),"METAR"]
     if get_fix_name(s) != None:
         return [get_fix_name(s),"Fix"]
     if getAircraft(s) != None:
@@ -249,7 +269,25 @@ class Task(UserControl):
         metars[self.task_name]=self.metar
 
         self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
-        self.textRWY = Text(self.recommendRWY[0], size=13, text_align = TextAlign.CENTER)
+        self.textStyleQNH = TextStyle(
+                                        decoration_thickness = 1,
+                                        decoration_color=colors.OUTLINE,
+                                        size=13, 
+                                    )
+        self.textRWY = Text(
+                            spans=[
+                                TextSpan(
+                                    self.recommendRWY[0],
+                                    ),
+                                ],
+                            text_align = TextAlign.CENTER,
+                            size=13,
+                        )
+        if self.metar_short[4] == "1":
+            self.textStyleQNH.decoration=TextDecoration.UNDERLINE
+        if self.metar_short[4] == "2":
+            self.textStyleQNH.decoration=TextDecoration.UNDERLINE
+            self.textStyleQNH.decoration_color=colors.RED
         if self.recommendRWY[1]:
             self.textRWY.color = colors.RED
 
@@ -260,19 +298,51 @@ class Task(UserControl):
                 height=17,
                 controls=[
                     Container(
-                        Text(self.metar_short[0], size=13, text_align = TextAlign.CENTER),
+                        Text(
+                            spans=[
+                                TextSpan(
+                                    self.metar_short[0],
+                                    ),
+                                ],
+                            text_align = TextAlign.CENTER,
+                            size=13,
+                        ),
                         width=40,
                     ),
                     Container(
-                        Text(self.metar_short[1], size=13, text_align = TextAlign.CENTER),
+                        Text(
+                            spans=[
+                                TextSpan(
+                                        self.metar_short[1],
+                                    ),
+                                ],
+                            text_align = TextAlign.CENTER,
+                            size=13,
+                        ),
                         width=40,
                     ),
                     Container(
-                        Text(self.metar_short[2], size=13, text_align = TextAlign.CENTER),
+                        Text(
+                            spans=[
+                                TextSpan(
+                                        self.metar_short[2], 
+                                    ),
+                                ],
+                            text_align = TextAlign.CENTER,
+                            size=13,
+                        ),
                         width=53,
                     ),
                     Container(
-                        Text(self.metar_short[3], size=13, text_align = TextAlign.CENTER),
+                        Text(
+                            spans=[
+                                TextSpan(
+                                    self.metar_short[3], 
+                                    self.textStyleQNH, 
+                                    ),
+                                ],
+                                text_align = TextAlign.CENTER,
+                            ),
                         width=40,
                     ),
                     Container(
@@ -314,6 +384,10 @@ class Task(UserControl):
 
 
 class TodoApp(UserControl):
+    def __init__(self, window_on_top):
+        super().__init__()
+        self.window_on_top = window_on_top
+
     def build(self):
         self.new_task = TextField(
             text_size=13,
@@ -356,6 +430,15 @@ class TodoApp(UserControl):
                     height=30,
                     controls=[
                         self.new_task,
+                        IconButton(
+                            width=14,
+                            icon_size=15,
+                            icon=icons.PUSH_PIN_OUTLINED,
+                            selected_icon=icons.PUSH_PIN,
+                            on_click=self.toggle_icon_button,
+                            selected=False,
+                            style=ButtonStyle(color={"selected": colors.ON_BACKGROUND, "": colors.OUTLINE},overlay_color=colors.with_opacity(0, colors.PRIMARY),padding=0),
+                        ),
                         FloatingActionButton(
                             icon=icons.CACHED,
                             on_click=self.reload_clicked,
@@ -386,6 +469,9 @@ class TodoApp(UserControl):
         if info[1] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked)
             self.tasks.controls.append(task)
+        if info[1] == "CLEAR":
+            self.tasks.controls = []
+            metars.clear()
         else:
             self.task_clicked(None, info[0], info[1])
         self.new_task.value = ""
@@ -415,16 +501,21 @@ class TodoApp(UserControl):
 
     def reload_clicked(self, e):
         self.pb.value = None
-        self.tasks.controls = []
         self.update()
-        metars_copy = metars.copy()
-        metars.clear()
-        for key in metars_copy:
-            new_task = Task(key, self.task_delete, self.task_clicked)
-            self.tasks.controls.append(new_task)
-            self.update()
+        if self.pb.value == "":
+            self.tasks.controls = []
+            metars_copy = metars.copy()
+            metars.clear()
+            for key in metars_copy:
+                new_task = Task(key, self.task_delete, self.task_clicked)
+                self.tasks.controls.append(new_task)
         self.pb.value = 0
         self.update()
+
+    def toggle_icon_button(self, e):
+        e.control.selected = not e.control.selected
+        self.window_on_top(e.control.selected)
+        e.control.update()
 
 def main(page: Page):
     page.title = "METAR.id"
@@ -433,11 +524,14 @@ def main(page: Page):
     page.window_height = 396
     page.window_maximizable = False
     page.window_resizable = False
-    page.window_always_on_top = True
     page.theme = theme.Theme(color_scheme_seed='blue')
     page.update()
 
-    app = TodoApp()
+    def window_on_top(b):
+        page.window_always_on_top = b
+        page.update()
+
+    app = TodoApp(window_on_top)
     page.add(app)
 
 
