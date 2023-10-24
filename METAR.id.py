@@ -9,14 +9,13 @@ import re
 import unicodedata
 import threading
 import time
-import ctypes
 import os
 import sys
 
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.1.0-beta"
+version = "v0.2.0-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
@@ -27,7 +26,7 @@ fixnames = {}
 
 def check_version():
     try:
-        corrent_version = requests.get("https://raw.githubusercontent.com/sansuke1005/METAR.id/main/corrent_version.txt",timeout=3.5).text
+        corrent_version = requests.get("https://raw.githubusercontent.com/sansuke1005/METAR.id/main/current_version.txt",timeout=3.5).text
     except RequestException:
         return 3
     if corrent_version == "404: Not Found":
@@ -253,16 +252,20 @@ def autoSelector(s):
 
 
 class Task(UserControl):
-    def __init__(self, task_name, task_delete, task_clicked):
+    def __init__(self, task_name, task_delete, task_clicked, sortedMetar):
         super().__init__()
         self.task_name = codeConvert(task_name)
         self.task_delete = task_delete
         self.task_clicked = task_clicked
+        self.sortedMetar = sortedMetar
 
     def build(self):
         if self.task_name in metars.keys():
             return Column()
-        self.metar = getMetar(self.task_name)
+        if len(self.sortedMetar) == 0:
+            self.metar = getMetar(self.task_name)
+        else:
+            self.metar = self.sortedMetar
         self.metar_short = metar_summary(self.metar).split(" ")
         if self.metar_short[0] == "Error":
             return Column()
@@ -379,7 +382,7 @@ class Task(UserControl):
         self.task_clicked(self,getAiportName(self.task_name)+"\n"+metars[self.task_name],"METAR")
 
     def delete_clicked(self, e):
-        metars.pop(self.metar_short[0])
+        metars.pop(self.task_name)
         self.task_delete(self)
 
 
@@ -439,13 +442,29 @@ class TodoApp(UserControl):
                             selected=False,
                             style=ButtonStyle(color={"selected": colors.ON_BACKGROUND, "": colors.OUTLINE},overlay_color=colors.with_opacity(0, colors.PRIMARY),padding=0),
                         ),
-                        FloatingActionButton(
-                            icon=icons.CACHED,
+                        IconButton(
+                            width=14,
+                            icon_size=15,
+                            icon=icons.SORT,
+                            on_click=self.sort,
+                            style=ButtonStyle(color={"selected": colors.ON_BACKGROUND, "": colors.OUTLINE},overlay_color=colors.with_opacity(0, colors.PRIMARY),padding=0),
+                        ),
+                        ElevatedButton(
+                            content=Container(
+                                    Icon(name=icons.CACHED),
+                            ),
                             on_click=self.reload_clicked,
                             width=30,
-                            shape=RoundedRectangleBorder(radius=5),
-                            
+                            style=ButtonStyle(
+                                color=colors.ON_BACKGROUND,
+                                bgcolor={
+                                        MaterialState.DEFAULT: colors.PRIMARY_CONTAINER,
+                                    },
+                                padding=0,
+                                shape=RoundedRectangleBorder(radius=5),
+                                ),
                         ),
+                        
                     ],
                 ),
                 Container(
@@ -467,7 +486,7 @@ class TodoApp(UserControl):
         self.update()
         info = autoSelector(self.new_task.value)
         if info[1] == "METAR":
-            task = Task(self.new_task.value, self.task_delete, self.task_clicked)
+            task = Task(self.new_task.value, self.task_delete, self.task_clicked, [])
             self.tasks.controls.append(task)
         if info[1] == "CLEAR":
             self.tasks.controls = []
@@ -507,7 +526,21 @@ class TodoApp(UserControl):
             metars_copy = metars.copy()
             metars.clear()
             for key in metars_copy:
-                new_task = Task(key, self.task_delete, self.task_clicked)
+                new_task = Task(key, self.task_delete, self.task_clicked, [])
+                self.tasks.controls.append(new_task)
+        self.pb.value = 0
+        self.update()
+
+    def sort(self, e):
+        self.pb.value = None
+        self.update()
+        if self.pb.value == "":
+            self.tasks.controls = []
+            metars_sort = sorted(metars.items())    #変更
+            metars_sort = dict((x, y) for x, y in metars_sort)
+            metars.clear()
+            for key in metars_sort:
+                new_task = Task(key, self.task_delete, self.task_clicked, metars_sort[key])
                 self.tasks.controls.append(new_task)
         self.pb.value = 0
         self.update()
