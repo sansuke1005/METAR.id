@@ -24,6 +24,12 @@ aircrafts = {}
 airlines = {}
 fixnames = {}
 
+jumbo_mode = False
+args = sys.argv
+if len(args) == 2:
+    if args[1] == "-jumbo":
+        jumbo_mode = True
+
 def check_version():
     try:
         corrent_version = requests.get("https://raw.githubusercontent.com/sansuke1005/METAR.id/main/current_version.txt",timeout=3.5).text
@@ -294,59 +300,78 @@ class Task(UserControl):
         if self.recommendRWY[1]:
             self.textRWY.color = colors.RED
 
+        if jumbo_mode:
+            self.metar_code = self.metar_short[0]
+            self.metar_time = self.metar_short[1][:4]
+            self.metar_wind = self.metar_short[2].replace("@","")
+            self.metar_QNH = self.metar_short[3][2:]
+        else:
+            self.metar_code = self.metar_short[0]
+            self.metar_time = self.metar_short[1]
+            self.metar_wind = self.metar_short[2]
+            self.metar_QNH = self.metar_short[3]
+
         self.display_view = Container(
             Row(
                 alignment="spaceBetween",
                 vertical_alignment="center",
-                height=17,
+                height=26,
                 controls=[
                     Container(
                         Text(
                             spans=[
                                 TextSpan(
-                                    self.metar_short[0],
+                                    self.metar_code,
                                     ),
                                 ],
                             text_align = TextAlign.CENTER,
                             size=13,
+                            no_wrap=True,
+                            overflow=TextOverflow.VISIBLE,
                         ),
-                        width=40,
+                        width=34,
                     ),
                     Container(
                         Text(
                             spans=[
                                 TextSpan(
-                                        self.metar_short[1],
+                                        self.metar_time,
                                     ),
                                 ],
                             text_align = TextAlign.CENTER,
                             size=13,
+                            no_wrap=True,
+                            overflow=TextOverflow.VISIBLE,
                         ),
-                        width=40,
+                        width=len(self.metar_time)*8,
                     ),
                     Container(
                         Text(
                             spans=[
                                 TextSpan(
-                                        self.metar_short[2], 
+                                        self.metar_wind, 
                                     ),
                                 ],
                             text_align = TextAlign.CENTER,
                             size=13,
+                            no_wrap=True,
+                            overflow=TextOverflow.VISIBLE,
                         ),
-                        width=53,
+                        width=len(self.metar_wind)*8,
                     ),
                     Container(
                         Text(
                             spans=[
                                 TextSpan(
-                                    self.metar_short[3], 
+                                    self.metar_QNH, 
                                     self.textStyleQNH, 
                                     ),
                                 ],
                                 text_align = TextAlign.CENTER,
+                                no_wrap=True,
+                                overflow=TextOverflow.VISIBLE,
                             ),
-                        width=40,
+                        width=len(self.metar_QNH)*8,
                     ),
                     Container(
                         self.textRWY,
@@ -370,9 +395,9 @@ class Task(UserControl):
                     ),
                 ],
             ),
-            padding=5,
             ink=True,
             on_click=self.container_clicked,
+            padding= padding.only(left=5,right=7),
         )
         if chekIMC(self.metar):
             self.display_view.bgcolor = colors.with_opacity(0.1, colors.RED)
@@ -469,7 +494,7 @@ class TodoApp(UserControl):
                 ),
                 Container(
                     self.tasks,
-                    height=215,
+                    height=208,
                 ),
                 Container(
                     self.info,
@@ -488,7 +513,7 @@ class TodoApp(UserControl):
         if info[1] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked, [])
             self.tasks.controls.append(task)
-        if info[1] == "CLEAR":
+        elif info[1] == "CLEAR":
             self.tasks.controls = []
             metars.clear()
         else:
@@ -554,7 +579,7 @@ def main(page: Page):
     page.title = "METAR.id"
     #page.theme_mode = "LIGHT"
     page.window_width = 300
-    page.window_height = 396
+    page.window_height = 390
     page.window_maximizable = False
     page.window_resizable = False
     page.theme = theme.Theme(color_scheme_seed='blue')
