@@ -16,7 +16,7 @@ import apptype
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.3.0-beta"
+version = "v0.3.1-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
@@ -114,7 +114,7 @@ def metar_summary(s):
     if metar_split[2] == "AUTO" or metar_split[2] == "COR":
         del metar_split[2]
     if "NIL" in metar_split[2]:
-        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A","0"]
+        metar_short = [metar_split[0],metar_split[1][2:],"N/A","N/A","0"]
         return " ".join(metar_short)
     QNH = "ERROR"
     availFL = ""
