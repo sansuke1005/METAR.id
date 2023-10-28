@@ -16,9 +16,10 @@ import apptype
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.3.1-beta"
+version = "v0.3.2-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
+text_width = [34,40,48,40,45]
 
 RWYData = {}
 aircrafts = {}
@@ -30,6 +31,7 @@ args = sys.argv
 if len(args) == 2:
     if args[1] == "-jumbo":
         jumbo_mode = True
+        text_width = [34,32,40,24,45]
 
 def check_version():
     try:
@@ -144,7 +146,7 @@ def getRecommendRWY(port, metar_short):
     priy_rwy = RWYData[port][0]
     oppo_rwy = RWYData[port][1]
     wind = metar_short[2]
-    if wind == "N/A":
+    if "N/A" in wind:
         return ["RWY" + priy_rwy.zfill(2),0]
     if wind[:3] == "VRB":
         return ["RWY" + priy_rwy.zfill(2),0]
@@ -261,7 +263,6 @@ def autoSelector(s):
         return [getAirline(s),"Airline"]
     return ["Error",None]
 
-
 class Task(UserControl):
     def __init__(self, task_name, task_delete, task_clicked, sortedMetar):
         super().__init__()
@@ -313,7 +314,7 @@ class Task(UserControl):
             self.metar_code = self.metar_short[0]
             self.metar_time = self.metar_short[1][:4]
             self.metar_wind = self.metar_short[2].replace("@","")
-            self.metar_QNH = self.metar_short[3][2:]
+            self.metar_QNH = self.metar_short[3][len(self.metar_short[3])-3:]
         else:
             self.metar_code = self.metar_short[0]
             self.metar_time = self.metar_short[1]
@@ -338,7 +339,7 @@ class Task(UserControl):
                             no_wrap=True,
                             overflow=TextOverflow.VISIBLE,
                         ),
-                        width=34,
+                        width=text_width[0],
                     ),
                     Container(
                         Text(
@@ -352,7 +353,7 @@ class Task(UserControl):
                             no_wrap=True,
                             overflow=TextOverflow.VISIBLE,
                         ),
-                        width=len(self.metar_time)*8,
+                        width=text_width[1],
                     ),
                     Container(
                         Text(
@@ -366,7 +367,7 @@ class Task(UserControl):
                             no_wrap=True,
                             overflow=TextOverflow.VISIBLE,
                         ),
-                        width=len(self.metar_wind)*8,
+                        width=text_width[2],
                     ),
                     Container(
                         Text(
@@ -380,11 +381,11 @@ class Task(UserControl):
                                 no_wrap=True,
                                 overflow=TextOverflow.VISIBLE,
                             ),
-                        width=len(self.metar_QNH)*8,
+                        width=text_width[3],
                     ),
                     Container(
                         self.textRWY,
-                        width=45,
+                        width=text_width[4],
                     ),
 
                     IconButton(
