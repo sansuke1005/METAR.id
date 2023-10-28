@@ -11,11 +11,12 @@ import threading
 import time
 import os
 import sys
+import apptype
 
 load_url = "https://www.imocwx.com/i/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.2.0-beta"
+version = "v0.3.0-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 
@@ -113,7 +114,7 @@ def metar_summary(s):
     if metar_split[2] == "AUTO" or metar_split[2] == "COR":
         del metar_split[2]
     if "NIL" in metar_split[2]:
-        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A",0]
+        metar_short = [metar_split[0],metar_split[1][1:],"N/A","N/A","0"]
         return " ".join(metar_short)
     QNH = "ERROR"
     availFL = ""
@@ -138,13 +139,15 @@ def getAiportName(port):
     return airportName
 
 def getRecommendRWY(port, metar_short):
+    if port == "RJTT":
+        return [apptype.get_rjtt_app(),2]
     priy_rwy = RWYData[port][0]
     oppo_rwy = RWYData[port][1]
     wind = metar_short[2]
     if wind == "N/A":
-        return ["RWY" + priy_rwy.zfill(2),False]
+        return ["RWY" + priy_rwy.zfill(2),0]
     if wind[:3] == "VRB":
-        return ["RWY" + priy_rwy.zfill(2),False]
+        return ["RWY" + priy_rwy.zfill(2),0]
     wind_d = int(wind[:3])
     wind_v = int(wind[4:])
     wind_limit = int(RWYData[port][2])
@@ -153,10 +156,10 @@ def getRecommendRWY(port, metar_short):
     recommendRWY = ""
     if wind_t < wind_limit:
         if wind_t > 0:
-            return ["RWY" + priy_rwy.zfill(2),True]
+            return ["RWY" + priy_rwy.zfill(2),1]
         else:
-            return ["RWY" + priy_rwy.zfill(2),False]
-    return ["RWY" + oppo_rwy.zfill(2),False]
+            return ["RWY" + priy_rwy.zfill(2),0]
+    return ["RWY" + oppo_rwy.zfill(2),0]
 
 def chekIMC(metar):
     if metar == "Error":
@@ -233,6 +236,8 @@ def autoSelector(s):
     if s.isdecimal() and (len(s)==6 or len(s)==7):
         webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
         return ["",None]
+    if s == "HND":
+        return [apptype.get_rjtt_app_all(),"RJTT APCH Type"]
     if len(s)==1:
         port = "RJ"+s+s
         if port in RWYData.keys():
@@ -279,8 +284,8 @@ class Task(UserControl):
 
         self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
         self.textStyleQNH = TextStyle(
-                                        decoration_thickness = 1,
-                                        decoration_color=colors.OUTLINE,
+                                        decoration_thickness = 2,
+                                        decoration_color=colors.GREY_600,
                                         size=13, 
                                     )
         self.textRWY = Text(
@@ -291,14 +296,18 @@ class Task(UserControl):
                                 ],
                             text_align = TextAlign.CENTER,
                             size=13,
+                            no_wrap=True,
+                            overflow=TextOverflow.VISIBLE,
                         )
         if self.metar_short[4] == "1":
             self.textStyleQNH.decoration=TextDecoration.UNDERLINE
         if self.metar_short[4] == "2":
             self.textStyleQNH.decoration=TextDecoration.UNDERLINE
             self.textStyleQNH.decoration_color=colors.RED
-        if self.recommendRWY[1]:
+        if self.recommendRWY[1] == 1:
             self.textRWY.color = colors.RED
+        if self.recommendRWY[1] == 2:
+            self.textRWY.color = colors.PRIMARY
 
         if jumbo_mode:
             self.metar_code = self.metar_short[0]
@@ -424,6 +433,7 @@ class TodoApp(UserControl):
             on_change=self.check_alnum,
             content_padding= padding.only(left=5),
             border_color = colors.OUTLINE,
+            autofocus = True,
         )
         self.tasks = Column(spacing=0, scroll=ScrollMode.AUTO,)
         self.info = TextField(
@@ -520,7 +530,9 @@ class TodoApp(UserControl):
             self.task_clicked(None, info[0], info[1])
         self.new_task.value = ""
         self.pb.value = 0
+        self.new_task.focus()
         self.update()
+
 
     def check_alnum(self,e):
         if re.compile("[a-zA-Z0-9]+").match(self.new_task.value):
