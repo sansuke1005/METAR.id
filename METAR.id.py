@@ -13,10 +13,10 @@ import os
 import sys
 import apptype
 
-load_url = "https://www.imocwx.com/i/metar.php"
+load_url = "https://www.imoc.co.jp/SmartPhone/d/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.3.2-beta"
+version = "v0.3.3-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 text_width = [34,40,48,40,45]
@@ -81,23 +81,21 @@ def load_text_file():
 
 
 def getMetar(port):
-    if not port in RWYData.keys():
-        return "Error"
+    if len(port)==1:
+        port = "RJ" + port + port
+    elif len(port)==2:
+        port = "RJ" + port
     params = {'Area': '0', 'Port': port}
     html = requests.get(load_url, params=params)
     soup = BeautifulSoup(html.content, "html.parser")
-    body = soup.find("body")
-    lines = body.text
-    line = lines.split("\n")
-    line_len = len(line)
-    metar_temp = []
-    if line_len >= 8:
-        for i in range(line_len-7):
-            metar_temp.append(line[i+3].strip()) 
-        metar = " ".join(metar_temp)
-        if metar[:5] == "METAR":
-            metar = metar[6:]
-        return metar
+    lines = soup.find("ul").text
+    lines_list = re.sub("\n +", " ", lines).split("\n")
+    for s in lines_list:
+        if len(s) > 15:
+            if "NIL" not in s:
+                if s[:5] == "METAR":
+                    return s[6:]
+                return s
     return "Error"
 
 def codeConvert(port):
@@ -137,7 +135,7 @@ def metar_summary(s):
     return " ".join(metar_short)
 
 def getAiportName(port):
-    airportName = RWYData[port][4]
+    airportName = RWYData[port][4] + " ("+RWYData[port][5]+")"
     return airportName
 
 def getRecommendRWY(port, metar_short):
@@ -239,7 +237,7 @@ def autoSelector(s):
         webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
         return ["",None]
     if s == "HND":
-        return [apptype.get_rjtt_app_all(),"RJTT APCH Type"]
+        return [apptype.get_rjtt_app_all(),"RJTT INFO"]
     if len(s)==1:
         port = "RJ"+s+s
         if port in RWYData.keys():
@@ -523,6 +521,7 @@ class TodoApp(UserControl):
         info = autoSelector(self.new_task.value)
         if info[1] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked, [])
+            self.task_clicked(None, getAiportName(task.task_name)+"\n"+info[0], info[1])
             self.tasks.controls.append(task)
         elif info[1] == "CLEAR":
             self.tasks.controls = []
