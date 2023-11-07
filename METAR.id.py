@@ -17,7 +17,7 @@ import squroute
 load_url = "https://www.imoc.co.jp/SmartPhone/d/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.4.0-beta"
+version = "v0.4.1-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 text_width = [34,40,48,40,45]
@@ -622,7 +622,10 @@ class TodoApp(UserControl):
         self.info.value = new_info
         self.info.label = info_label
         self.info_text.text = text
-        self.info_text.url = "http://route.sansuke.site/?from={}&to={}".format(info_label[0:4],info_label[5:9])
+        if info_label is None:
+            self.info_text.url = ""
+        else:
+            self.info_text.url = "http://route.sansuke.site/?from={}&to={}".format(info_label[0:4],info_label[5:9])
         self.update()
 
     def reload_clicked(self, e):
