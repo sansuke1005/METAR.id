@@ -12,11 +12,12 @@ import time
 import os
 import sys
 import apptype
+import squroute
 
 load_url = "https://www.imoc.co.jp/SmartPhone/d/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.3.3-beta"
+version = "v0.4.0-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 text_width = [34,40,48,40,45]
@@ -140,7 +141,9 @@ def getAiportName(port):
 
 def getRecommendRWY(port, metar_short):
     if port == "RJTT":
-        return [apptype.get_rjtt_app(),2]
+        rjtt_app = apptype.get_rjtt_app()
+        if rjtt_app != "ERROR":
+            return [apptype.get_rjtt_app(),2]
     priy_rwy = RWYData[port][0]
     oppo_rwy = RWYData[port][1]
     wind = metar_short[2]
@@ -228,38 +231,62 @@ def get_fix_name(s):
     fixname = "Name: " + fixnames[s]
     return s + "\n" + fixname
 
+def get_route(s):
+    routes = squroute.get_route(s.split(" ")[0],s.split(" ")[1])
+    route = routes[0]
+    if route == "ERROR":
+        return ["Not Found","",""]
+    
+    if route[2] == "" and route[1] == "":
+        route_info = "{}".format(route[0])
+    if route[2] == "" and route[1] != "":
+        route_info = "{}\n({})".format(route[0],route[1])
+    if route[2] != "" and route[1] == "":
+        route_info = "{}\n({})".format(route[0],route[2])
+    if route[2] != "" and route[1] != "":
+        route_info = "{}\n({}, {})".format(route[0],route[2],route[1])
+    
+    if routes[2]-1 == 0:
+        return [route_info,routes[1],""]
+    if routes[2]-1 == 1:
+        return [route_info,routes[1],"more {} route".format(str(routes[2]-1))]
+    return [route_info,routes[1],"more {} routes".format(str(routes[2]-1))]
+
 def autoSelector(s):
+    if len(s.split(" "))==2:
+        get_routes = get_route(s)
+        return [get_routes[0],get_routes[1],get_routes[2]]
     if s == "/" or s == "CLR" or s == "CLEAR":
-        return ["","CLEAR"]
+        return ["","CLEAR",""]
     if s in specialKey:
-        return [special(s),None]
+        return [special(s),None,""]
     if s.isdecimal() and (len(s)==6 or len(s)==7):
         webbrowser.open("https://stats.vatsim.net/stats/"+s, new=0, autoraise=True)
-        return ["",None]
+        return ["",None,""]
     if s == "HND":
-        return [apptype.get_rjtt_app_all(),"RJTT INFO"]
+        return [apptype.get_rjtt_app_all(),"RJTT INFO",""]
     if len(s)==1:
         port = "RJ"+s+s
         if port in RWYData.keys():
-            return [getMetar(port),"METAR"]
+            return [getMetar(port),"METAR",""]
     if len(s)==2:
         port = "RJ"+s
         if port in RWYData.keys():
-            return [getMetar(port),"METAR"]
+            return [getMetar(port),"METAR",""]
     if len(s)==3 and s[0] == "O":
         port = "R"+s
         if port in RWYData.keys():
-            return [getMetar(port),"METAR"]
+            return [getMetar(port),"METAR",""]
     if s[:2] == "RJ" or s[:2] == "RO":
         if s in RWYData.keys():
-            return [getMetar(s),"METAR"]
+            return [getMetar(s),"METAR",""]
     if get_fix_name(s) != None:
-        return [get_fix_name(s),"Fix"]
+        return [get_fix_name(s),"Fix",""]
     if getAircraft(s) != None:
-        return [getAircraft(s),"Aircraft"]
+        return [getAircraft(s),"Aircraft",""]
     if getAirline(s) != None:
-        return [getAirline(s),"Airline"]
-    return ["Error",None]
+        return [getAirline(s),"Airline",""]
+    return ["Error",None,""]
 
 class Task(UserControl):
     def __init__(self, task_name, task_delete, task_clicked, sortedMetar):
@@ -412,7 +439,7 @@ class Task(UserControl):
         return Column(controls=[self.display_view],spacing=0,)
     
     def container_clicked(self, e):
-        self.task_clicked(self,getAiportName(self.task_name)+"\n"+metars[self.task_name],"METAR")
+        self.task_clicked(self,getAiportName(self.task_name)+"\n"+metars[self.task_name],"METAR","")
 
     def delete_clicked(self, e):
         metars.pop(self.task_name)
@@ -452,6 +479,47 @@ class TodoApp(UserControl):
                 color = colors.OUTLINE_VARIANT,
             )
         )
+        self.info = TextField(
+            text_size=13,
+            multiline=True,
+            read_only=True,
+            value="",
+            min_lines=4,
+            max_lines=4,
+            content_padding= 5,
+            border_color = colors.OUTLINE_VARIANT,
+            focused_border_color = colors.OUTLINE_VARIANT,
+            focused_border_width = 1,
+            label=None,
+            label_style = TextStyle(
+                size = 13,
+                color = colors.OUTLINE_VARIANT,
+            )
+        )
+        self.info_text = TextSpan(
+            text ="",
+            style = TextStyle(color=colors.BLUE),
+            url="",
+            on_enter=self.highlight_link,
+            on_exit=self.unhighlight_link,
+        )
+        self.info_box = Stack(
+            [
+                self.info,
+                Container(
+                    Text(
+                        spans=[
+                            self.info_text,
+                            ],
+                        size=13,
+                    ),
+                    right=3,
+                    bottom=3,
+                )
+
+            ],
+        )
+
         self.pb = ProgressBar(color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0)
 
         self.t = CustomThread1(self.reload_clicked)
@@ -506,7 +574,7 @@ class TodoApp(UserControl):
                     height=208,
                 ),
                 Container(
-                    self.info,
+                    self.info_box,
                 ),
                 self.pb,
                 
@@ -521,13 +589,13 @@ class TodoApp(UserControl):
         info = autoSelector(self.new_task.value)
         if info[1] == "METAR":
             task = Task(self.new_task.value, self.task_delete, self.task_clicked, [])
-            self.task_clicked(None, getAiportName(task.task_name)+"\n"+info[0], info[1])
+            self.task_clicked(None, getAiportName(task.task_name)+"\n"+info[0], info[1],"")
             self.tasks.controls.append(task)
         elif info[1] == "CLEAR":
             self.tasks.controls = []
             metars.clear()
         else:
-            self.task_clicked(None, info[0], info[1])
+            self.task_clicked(None, info[0], info[1],info[2])
         self.new_task.value = ""
         self.pb.value = 0
         self.new_task.focus()
@@ -550,9 +618,11 @@ class TodoApp(UserControl):
         self.tasks.controls.remove(task)
         self.update()
 
-    def task_clicked(self, task, new_info, info_label):
+    def task_clicked(self, task, new_info, info_label, text):
         self.info.value = new_info
         self.info.label = info_label
+        self.info_text.text = text
+        self.info_text.url = "http://route.sansuke.site/?from={}&to={}".format(info_label[0:4],info_label[5:9])
         self.update()
 
     def reload_clicked(self, e):
@@ -585,6 +655,14 @@ class TodoApp(UserControl):
     def toggle_icon_button(self, e):
         e.control.selected = not e.control.selected
         self.window_on_top(e.control.selected)
+        e.control.update()
+
+    def highlight_link(self,e):
+        e.control.style.decoration = TextDecoration.UNDERLINE
+        e.control.update()
+
+    def unhighlight_link(self,e):
+        e.control.style.decoration = TextDecoration.NONE
         e.control.update()
 
 def main(page: Page):
