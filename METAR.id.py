@@ -17,7 +17,7 @@ import squroute
 load_url = "https://www.imoc.co.jp/SmartPhone/d/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.4.1-beta"
+version = "v0.4.2-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 text_width = [34,40,48,40,45]
@@ -139,11 +139,10 @@ def getAiportName(port):
     airportName = RWYData[port][4] + " ("+RWYData[port][5]+")"
     return airportName
 
+def get_tt_IAP():
+    return apptype.get_rjtt_app()
+
 def getRecommendRWY(port, metar_short):
-    if port == "RJTT":
-        rjtt_app = apptype.get_rjtt_app()
-        if rjtt_app != "ERROR":
-            return [apptype.get_rjtt_app(),2]
     priy_rwy = RWYData[port][0]
     oppo_rwy = RWYData[port][1]
     wind = metar_short[2]
@@ -288,6 +287,18 @@ def autoSelector(s):
         return [getAirline(s),"Airline",""]
     return ["Error",None,""]
 
+class NewThread(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
+        threading.Thread.__init__(self, group, target, name, args, kwargs)
+
+    def run(self):
+        if self._target != None:
+            self._return = self._target(*self._args, **self._kwargs)
+
+    def join(self, *args):
+        threading.Thread.join(self, *args)
+        return self._return
+
 class Task(UserControl):
     def __init__(self, task_name, task_delete, task_clicked, sortedMetar):
         super().__init__()
@@ -299,6 +310,9 @@ class Task(UserControl):
     def build(self):
         if self.task_name in metars.keys():
             return Column()
+        self.thread_getIAP = NewThread(target=get_tt_IAP)
+        if self.task_name == "RJTT":
+            self.thread_getIAP.start()
         if len(self.sortedMetar) == 0:
             self.metar = getMetar(self.task_name)
         else:
@@ -308,7 +322,10 @@ class Task(UserControl):
             return Column()
         metars[self.task_name]=self.metar
 
-        self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
+        if self.task_name == "RJTT":
+            self.recommendRWY = [self.thread_getIAP.join(),2]
+        else:
+            self.recommendRWY = getRecommendRWY(self.metar_short[0],self.metar_short)
         self.textStyleQNH = TextStyle(
                                         decoration_thickness = 2,
                                         decoration_color=colors.GREY_600,
