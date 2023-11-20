@@ -17,7 +17,7 @@ import squroute
 load_url = "https://www.imoc.co.jp/SmartPhone/d/metar.php"
 metars = {}
 specialKey = ["VERSION","VATSIM","VATJPN","SANSUKE","TEMP","SQUAWK.ID","SOURCE","METAR.ID"]
-version = "v0.4.2-beta"
+version = "v0.5.0-beta"
 filepath = os.path.dirname(os.path.abspath(sys.argv[0]))
 textFiles = ["RWYData.txt","AIRCRAFT.txt","AIRLINES.txt"]
 text_width = [34,40,48,40,45]
@@ -478,7 +478,8 @@ class TodoApp(UserControl):
             border_color = colors.OUTLINE,
             autofocus = True,
         )
-        self.tasks = Column(spacing=0, scroll=ScrollMode.AUTO,)
+        self.tasks = Column(spacing=0, scroll=ScrollMode.AUTO, )
+        
         self.info = TextField(
             text_size=13,
             multiline=True,
@@ -520,33 +521,33 @@ class TodoApp(UserControl):
             on_enter=self.highlight_link,
             on_exit=self.unhighlight_link,
         )
-        self.info_box = Stack(
-            [
-                self.info,
-                Container(
-                    Text(
-                        spans=[
-                            self.info_text,
-                            ],
-                        size=13,
+        self.pb = ProgressBar(color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0,bar_height=3)
+        self.info_box = Column([
+            Stack([
+                    self.info,
+                    Container(
+                        Text(
+                            spans=[
+                                self.info_text,
+                                ],
+                            size=13,
+                        ),
+                        right=3,
+                        bottom=3,
                     ),
-                    right=3,
-                    bottom=3,
-                )
-
+                ]),
+            self.pb,
             ],
+            spacing=2,
+            
         )
-
-        self.pb = ProgressBar(color=colors.PRIMARY, bgcolor=colors.BACKGROUND, value=0)
 
         self.t = CustomThread1(self.reload_clicked)
         self.t.start()
 
 
 
-        return Column(
-            spacing=5,
-            controls=[
+        return Column([
                 Row(
                     spacing=5,
                     height=30,
@@ -588,14 +589,13 @@ class TodoApp(UserControl):
                 ),
                 Container(
                     self.tasks,
-                    height=208,
+                    expand=True,
                 ),
                 Container(
                     self.info_box,
                 ),
-                self.pb,
-                
             ],
+            spacing=5,
         )
         
     
@@ -608,6 +608,7 @@ class TodoApp(UserControl):
             task = Task(self.new_task.value, self.task_delete, self.task_clicked, [])
             self.task_clicked(None, getAiportName(task.task_name)+"\n"+info[0], info[1],"")
             self.tasks.controls.append(task)
+            self.tasks.scroll_to(offset=-1, duration=500)
         elif info[1] == "CLEAR":
             self.tasks.controls = []
             metars.clear()
@@ -689,9 +690,11 @@ def main(page: Page):
     page.title = "METAR.id"
     #page.theme_mode = "LIGHT"
     page.window_width = 300
-    page.window_height = 390
+    page.window_height = 395
+    page.window_min_width = 300
+    page.window_min_height = 216
     page.window_maximizable = False
-    page.window_resizable = False
+    #page.window_resizable = False
     page.theme = theme.Theme(color_scheme_seed='blue')
     page.update()
 
@@ -700,6 +703,7 @@ def main(page: Page):
         page.update()
 
     app = TodoApp(window_on_top)
+    app.expand = True
     page.add(app)
 
 
